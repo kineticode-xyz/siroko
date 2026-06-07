@@ -1,0 +1,10 @@
+/vendor/
+/var/
+.env
+.env.local
+.env.*.local
+/public/bundles/
+/.phpunit.cache/
+docker/data/
+*.log
+.DS_Store
