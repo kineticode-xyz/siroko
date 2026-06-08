@@ -86,3 +86,61 @@
 - **Solo aplica a AddItem.** `UpdateCartItem` y `RemoveCartItem` sobre un carrito inexistente SÍ lanzan `CartNotFound` (no tiene sentido actualizar/eliminar en un carrito que no existe).
 
 ---
+
+## D-005 — El OrderId lo genera el servidor vía puerto OrderIdGenerator
+
+**Fecha:** 2026-06-08
+**Estado:** Vigente
+**Tipo:** Decisión de negocio (humano) + diseño hexagonal.
+
+**Decisión:** El `OrderId` lo genera el **servidor** durante el checkout, a través de un puerto de dominio `OrderIdGenerator::nextIdentity(): OrderId`. La implementación (infra) usará `symfony/uid` (el stack ya es Symfony). En tests se usa un generador determinista.
+
+**Contexto:** Se aplazó la generación de ids al definir los identificadores; el checkout la necesita. A diferencia del `CartId` (que llega en la ruta), la orden la identifica el servidor.
+
+**Por qué:** Mantiene el dominio puro (no mete aleatoriedad ni librerías en el VO) y el handler 100% testeable con un fake. Se descartó `OrderId::generate()` en PHP puro (aleatoriedad en el dominio, tests no deterministas) y pasar el id dentro del comando (el cliente no debe poder fijarlo).
+
+---
+
+## D-006 — Checkout devuelve CheckoutResult; el pago rechazado es resultado, no excepción
+
+**Fecha:** 2026-06-08
+**Estado:** Vigente
+**Tipo:** Decisión de negocio (humano).
+
+**Decisión:** `Checkout` devuelve un DTO `CheckoutResult` (orderId, estado PAID/FAILED, total, moneda, motivo de fallo). El **pago rechazado NO lanza excepción**: la orden queda `FAILED` (persistida) y el resultado lo refleja.
+
+**Por qué:** El controller necesita el desenlace en una sola llamada para mapearlo a HTTP (p. ej. PAID→201, FAILED→402 con motivo). El rechazo de pago es un desenlace de negocio válido, no un error de programa. Las excepciones se reservan para lo que aborta antes de cobrar (carrito inexistente/vacío, stock insuficiente).
+
+**Nota:** Es la excepción a "los comandos devuelven void" (los comandos de carrito sí son void): el checkout produce un id de servidor y un estado que el caller debe conocer.
+
+---
+
+## D-007 — La orden se persiste en PENDING antes de cobrar
+
+**Fecha:** 2026-06-08
+**Estado:** Vigente
+**Tipo:** Criterio propio (IA), resolviendo una contradicción del PLAN.
+
+**Decisión:** En el checkout, la orden se **persiste en `PENDING` ANTES** de invocar la pasarela. Secuencia: validar stock → crear Order PENDING → **save** → charge → markPaid/markFailed → **save**.
+
+**Contexto:** El PLAN §3.7 lista "Persistir la orden" como paso 8 (al final), pero su propia nota justifica crear la orden antes del pago "para que si el proceso se interrumpe tras cobrar, la orden ya exista en PENDING y sea conciliable". Eso solo se cumple si la orden está **persistida** antes del cobro, no solo creada en memoria.
+
+**Por qué:** Honra la razón declarada en el PLAN: nunca cobrar sin dejar rastro persistente del pedido. El coste son dos `save` (insert PENDING + update estado), asumible.
+
+---
+
+## D-008 — AddItem valida existencia del producto con ProductCatalog::exists(), no con pricesFor descartado
+
+**Fecha:** 2026-06-08
+**Estado:** Vigente
+**Tipo:** Criterio propio (impuesto por el humano).
+
+**Decisión:** `AddItemToCart` valida que el producto existe en el catálogo mediante un método explícito `ProductCatalog::exists(ProductId): bool`; si no existe, el handler lanza `ProductNotInCatalog` antes de tocar el carrito. No se usa `pricesFor()` para esto.
+
+**Contexto:** La primera versión del handler llamaba a `pricesFor([$productId])` solo para validar existencia, trayendo un precio que descartaba. El humano pidió un método explícito en el puerto.
+
+**Por qué:** `exists()` es una query pura de intención clara (¿existe?) que devuelve `bool` sin ambigüedad, y evita traer precio/stock innecesarios solo para comprobar existencia. `pricesFor()` queda para cuando de verdad se necesitan los precios (GetCart, Checkout).
+
+**Nota de orden:** Cronológicamente esta decisión es anterior a las del checkout (D-005…D-007), pero se registra como D-008 para no desplazar números ya referenciados en el código (`OrderIdGenerator` cita D-005, `CheckoutResult` cita D-006) ni en commits previos. El número es un identificador estable, no un orden cronológico estricto.
+
+---
