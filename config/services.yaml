@@ -1,0 +1,58 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        bind:
+            string $catalogCurrency: '%env(CATALOG_CURRENCY)%'
+            bool $paymentAlwaysFails: '%env(bool:PAYMENT_ALWAYS_FAILS)%'
+
+    # --- Casos de uso (capa de Aplicación) -------------------------------------
+    # Se registran explícitamente (no por glob) porque los DTOs/commands comparten
+    # carpeta y no deben ser servicios (constructores con escalares).
+    Siroko\Cart\Application\AddItem\AddItemToCartHandler: ~
+    Siroko\Cart\Application\UpdateItem\UpdateCartItemHandler: ~
+    Siroko\Cart\Application\RemoveItem\RemoveCartItemHandler: ~
+    Siroko\Cart\Application\GetCart\GetCartHandler: ~
+    Siroko\Order\Application\Checkout\CheckoutHandler: ~
+
+    # --- Adaptadores de Infraestructura ----------------------------------------
+    # Los *Record son entidades Doctrine, no servicios -> se excluyen.
+    Siroko\Cart\Infrastructure\:
+        resource: '../src/Cart/Infrastructure/'
+        exclude:
+            - '../src/Cart/Infrastructure/Http/'
+            - '../src/Cart/Infrastructure/Persistence/CartRecord.php'
+            - '../src/Cart/Infrastructure/Persistence/CartItemRecord.php'
+            - '../src/Cart/Infrastructure/Catalog/ProductRecord.php'
+
+    Siroko\Order\Infrastructure\:
+        resource: '../src/Order/Infrastructure/'
+        exclude:
+            - '../src/Order/Infrastructure/Http/'
+            - '../src/Order/Infrastructure/Persistence/OrderRecord.php'
+            - '../src/Order/Infrastructure/Persistence/OrderLineRecord.php'
+
+    Siroko\Shared\Infrastructure\:
+        resource: '../src/Shared/Infrastructure/'
+        exclude:
+            - '../src/Shared/Infrastructure/Http/'
+
+    # --- Controllers + listener (necesitan el tag de controller) ---------------
+    Siroko\Cart\Infrastructure\Http\:
+        resource: '../src/Cart/Infrastructure/Http/'
+        tags: ['controller.service_arguments']
+
+    Siroko\Order\Infrastructure\Http\:
+        resource: '../src/Order/Infrastructure/Http/'
+        tags: ['controller.service_arguments']
+
+    Siroko\Shared\Infrastructure\Http\:
+        resource: '../src/Shared/Infrastructure/Http/'
+        tags: ['controller.service_arguments']
+
+    # --- Puertos -> adaptadores (bindings hexagonales) -------------------------
+    Siroko\Cart\Domain\CartRepository: '@Siroko\Cart\Infrastructure\Persistence\DoctrineCartRepository'
+    Siroko\Cart\Domain\ProductCatalog: '@Siroko\Cart\Infrastructure\Catalog\DoctrineProductCatalog'
+    Siroko\Order\Domain\OrderRepository: '@Siroko\Order\Infrastructure\Persistence\DoctrineOrderRepository'
+    Siroko\Order\Domain\PaymentGateway: '@Siroko\Order\Infrastructure\Payment\FakePaymentGateway'
+    Siroko\Order\Domain\OrderIdGenerator: '@Siroko\Order\Infrastructure\Identity\SymfonyUidOrderIdGenerator'

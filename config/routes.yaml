@@ -1,0 +1,17 @@
+health_controllers:
+    resource:
+        path: ../src/Shared/Infrastructure/Http/
+        namespace: Siroko\Shared\Infrastructure\Http
+    type: attribute
+
+cart_controllers:
+    resource:
+        path: ../src/Cart/Infrastructure/Http/
+        namespace: Siroko\Cart\Infrastructure\Http
+    type: attribute
+
+order_controllers:
+    resource:
+        path: ../src/Order/Infrastructure/Http/
+        namespace: Siroko\Order\Infrastructure\Http
+    type: attribute

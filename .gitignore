@@ -1,6 +1,6 @@
 /vendor/
 /var/
-.env
+# .env se versiona (valores no secretos, Symfony). Los secretos van en .env.local.
 .env.local
 .env.*.local
 /public/bundles/
@@ -8,3 +8,4 @@
 docker/data/
 *.log
 .DS_Store
+/config/reference.php

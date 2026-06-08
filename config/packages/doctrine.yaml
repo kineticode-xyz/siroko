@@ -1,0 +1,28 @@
+doctrine:
+    dbal:
+        url: '%env(resolve:DATABASE_URL)%'
+        server_version: '8.0'
+        charset: utf8mb4
+    orm:
+        auto_generate_proxy_classes: true
+        enable_lazy_ghost_objects: true
+        report_fields_where_declared: true
+        naming_strategy: doctrine.orm.naming_strategy.underscore_number_aware
+        auto_mapping: false
+        # El mapeo ORM vive en Infraestructura (records planos), nunca en el dominio (D-009).
+        mappings:
+            Cart:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Cart/Infrastructure/Persistence'
+                prefix: 'Siroko\Cart\Infrastructure\Persistence'
+            Catalog:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Cart/Infrastructure/Catalog'
+                prefix: 'Siroko\Cart\Infrastructure\Catalog'
+            Order:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Order/Infrastructure/Persistence'
+                prefix: 'Siroko\Order\Infrastructure\Persistence'
