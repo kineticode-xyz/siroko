@@ -1,0 +1,28 @@
+{
+    "name": "siroko/cart-checkout",
+    "description": "Siroko technical test — Cart & Checkout (Hexagonal + DDD + CQRS).",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.3"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Siroko\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Siroko\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
