@@ -144,3 +144,49 @@
 **Nota de orden:** Cronológicamente esta decisión es anterior a las del checkout (D-005…D-007), pero se registra como D-008 para no desplazar números ya referenciados en el código (`OrderIdGenerator` cita D-005, `CheckoutResult` cita D-006) ni en commits previos. El número es un identificador estable, no un orden cronológico estricto.
 
 ---
+
+## D-009 — Persistencia: modelo separado con Doctrine ORM, sin contaminar el dominio
+
+**Fecha:** 2026-06-08
+**Estado:** Vigente
+**Tipo:** Decisión de negocio/arquitectura (humano).
+
+**Decisión:** Las entidades de dominio (`Cart`, `CartItem`, `Order`, `OrderLine`) **no llevan nada de Doctrine**. La persistencia usa **entidades de persistencia separadas** en Infraestructura (p. ej. `CartRecord`, `CartItemRecord`, `OrderRecord`, `OrderLineRecord`) con los atributos ORM, y el **repositorio traduce** dominio↔record al guardar y al leer.
+
+**Contexto:** Se evaluaron tres vías: (A) modelo separado + ORM; (B) Doctrine DBAL con SQL en los repos; (C) mapeo XML directo de las clases de dominio. El humano eligió A, recalcando "el mapeo de Doctrine sin contaminar el dominio".
+
+**Por qué:** El agregado guarda las líneas en un `array` privado (no una `Collection` de Doctrine), usa VOs y no tiene setters; mapearlo directamente (C) forzaría a tocar el dominio (violando la regla de oro). El modelo separado mantiene el dominio 100% puro y usa el ORM de verdad.
+
+**Cómo se aplica:**
+- Records planos en `*/Infrastructure/Persistence` con atributos `#[ORM\...]`; el dominio nunca los importa.
+- El repositorio mapea VO→columnas escalares (Money→amount+currency, Quantity→int, ids→string, OrderStatus→string).
+- Reconstitución del agregado desde records **sin setters**: `Cart` se rearma con `new Cart(id)` + `addItem(...)` por línea; `Order` con `Order::place(id, lines)` y luego aplicando el estado persistido vía `markPaid()/markFailed()` (transiciones legales; el total se recalcula idéntico porque los precios van congelados en las líneas). Si esto resultara forzado, se añadiría un named constructor de reconstitución en el dominio (PHP puro, sin framework).
+- **Caveat:** los tests in-memory ya clonan en profundidad para emular este desacople; los repos Doctrine tendrán tests de integración contra MySQL.
+
+---
+
+## D-010 — El catálogo de productos vive en una tabla MySQL + fixtures
+
+**Fecha:** 2026-06-08
+**Estado:** Vigente
+**Tipo:** Decisión de negocio (humano).
+
+**Decisión:** El `ProductCatalog` se implementa contra una tabla `products` (id, price_cents, currency, stock) en MySQL, sembrada con fixtures. El adaptador resuelve precios/stock con un **SELECT batch** (`WHERE id IN (...)`).
+
+**Por qué:** Hace real y demostrable la medición de performance (§10: N+1 vs consulta batch). Un catálogo en config/in-memory no tendría DB que optimizar y vaciaría de sentido la medición.
+
+---
+
+## D-011 — Excepciones de dominio → HTTP vía listener central
+
+**Fecha:** 2026-06-08
+**Estado:** Vigente
+**Tipo:** Decisión de negocio (humano).
+
+**Decisión:** Un `EventSubscriber` central de Symfony traduce las excepciones de dominio a su respuesta HTTP (código + JSON). Los controllers no hacen try/catch.
+
+**Por qué:** Mantiene los controllers finos y el mapeo en un único sitio, evitando inconsistencias entre endpoints.
+
+**Mapeo propuesto (ajustable):** `CartNotFound`/`OrderNotFound`/`ProductNotInCatalog`→404; `InvalidQuantity`/`InvalidCurrency`/`InvalidIdentifier`→400; `EmptyCart`/`InsufficientStock`/`CartItemNotFound`/`IllegalOrderTransition`→409. (El pago rechazado NO es excepción: es `CheckoutResult` FAILED → el controller responde 402.)
+
+---

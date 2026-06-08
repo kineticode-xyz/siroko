@@ -1,0 +1,171 @@
+openapi: 3.0.3
+info:
+  title: Siroko — Carrito & Checkout API
+  description: >
+    API de gestión de carrito y checkout (prueba técnica Siroko, Opción A).
+    Arquitectura Hexagonal + DDD + CQRS. Importes monetarios SIEMPRE en céntimos (enteros).
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Entorno local (docker-compose)
+
+paths:
+  /health:
+    get:
+      summary: Healthcheck
+      operationId: health
+      responses:
+        '200':
+          description: Servicio operativo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /cart/{cartId}/items:
+    post:
+      summary: Añadir un producto al carrito (crea el carrito si no existe; fusiona si ya está)
+      operationId: addItem
+      parameters:
+        - $ref: '#/components/parameters/CartId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, quantity]
+              properties:
+                productId: { type: string, example: SKU-0001 }
+                quantity: { type: integer, minimum: 1, example: 2 }
+      responses:
+        '204': { description: Producto añadido }
+        '400':
+          description: Cantidad inválida (< 1)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '404':
+          description: El producto no existe en el catálogo
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /cart/{cartId}/items/{productId}:
+    patch:
+      summary: Actualizar la cantidad de una línea (valor absoluto)
+      operationId: updateItem
+      parameters:
+        - $ref: '#/components/parameters/CartId'
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity: { type: integer, minimum: 1, example: 5 }
+      responses:
+        '204': { description: Cantidad actualizada }
+        '400':
+          description: Cantidad inválida (< 1)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '404':
+          description: Carrito o línea inexistente
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    delete:
+      summary: Eliminar una línea del carrito
+      operationId: removeItem
+      parameters:
+        - $ref: '#/components/parameters/CartId'
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '204': { description: Línea eliminada }
+        '404':
+          description: Carrito o línea inexistente
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /cart/{cartId}:
+    get:
+      summary: Obtener el contenido del carrito (líneas, precios vigentes y total)
+      operationId: getCart
+      parameters:
+        - $ref: '#/components/parameters/CartId'
+      responses:
+        '200':
+          description: Contenido del carrito
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartView' }
+        '404':
+          description: Carrito inexistente
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /cart/{cartId}/checkout:
+    post:
+      summary: Confirmar el carrito y generar una orden persistente
+      operationId: checkout
+      parameters:
+        - $ref: '#/components/parameters/CartId'
+      responses:
+        '201':
+          description: Pago aceptado, orden PAID y carrito eliminado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutResult' }
+        '402':
+          description: Pago rechazado; la orden queda FAILED (persistida) y el carrito intacto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutResult' }
+        '404':
+          description: Carrito inexistente
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '409':
+          description: Carrito vacío o stock insuficiente
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+components:
+  parameters:
+    CartId:
+      name: cartId
+      in: path
+      required: true
+      schema: { type: string }
+      example: cart-1
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema: { type: string }
+      example: SKU-0001
+  schemas:
+    CartView:
+      type: object
+      properties:
+        cartId: { type: string, example: cart-1 }
+        currency: { type: string, example: EUR }
+        totalAmount: { type: integer, description: Total en céntimos, example: 3185 }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/CartLineView' }
+    CartLineView:
+      type: object
+      properties:
+        productId: { type: string, example: SKU-0001 }
+        quantity: { type: integer, example: 5 }
+        unitPriceAmount: { type: integer, description: Precio unitario en céntimos, example: 637 }
+        subtotalAmount: { type: integer, description: Subtotal en céntimos, example: 3185 }
+    CheckoutResult:
+      type: object
+      properties:
+        orderId: { type: string, example: e3c2c821-d9a7-41d1-a914-a7247b02cc1e }
+        status: { type: string, enum: [paid, failed], example: paid }
+        totalAmount: { type: integer, description: Total en céntimos, example: 3185 }
+        currency: { type: string, example: EUR }
+        failureReason: { type: string, nullable: true, example: null }
+    Error:
+      type: object
+      properties:
+        error: { type: string, example: No existe el carrito cart-1. }
